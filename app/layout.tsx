@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import Navbar from "@/components/Navbar";
+import BrandTag from "@/components/BrandTag";
 
 export const metadata: Metadata = {
   title: "Campus LostLink – Lost & Found Portal",
@@ -30,6 +31,7 @@ export default function RootLayout({
             Built with ❤️ — Reuniting campus belongings, one item at a time
           </p>
         </footer>
+        <BrandTag />
       </body>
     </html>
   );
