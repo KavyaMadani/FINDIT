@@ -1,26 +1,285 @@
+@import url("https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Rajdhani:wght@400;500;600;700&family=Inter:wght@300;400;500;600&display=swap");
 @import "tailwindcss";
 
+/* ============================================================
+   RETRO ARCADE THEME – Campus LostLink
+   ============================================================ */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --neon-cyan: #00f5ff;
+  --neon-pink: #ff007f;
+  --neon-purple: #bf00ff;
+  --neon-yellow: #ffe600;
+  --neon-green: #00ff88;
+  --bg-dark: #07080f;
+  --bg-card: #0d1117;
+  --bg-card2: #111827;
+  --border-glow: rgba(0, 245, 255, 0.3);
+  --text-primary: #e2e8f0;
+  --text-muted: #64748b;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  scroll-behavior: smooth;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--bg-dark);
+  color: var(--text-primary);
+  font-family: "Inter", "Rajdhani", sans-serif;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-dark);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--neon-cyan);
+  border-radius: 3px;
+}
+
+/* ── Pixel heading font ── */
+.font-pixel {
+  font-family: "Press Start 2P", monospace;
+}
+
+/* ── Neon glow utilities ── */
+.glow-cyan {
+  text-shadow: 0 0 8px var(--neon-cyan), 0 0 20px var(--neon-cyan);
+}
+.glow-pink {
+  text-shadow: 0 0 8px var(--neon-pink), 0 0 20px var(--neon-pink);
+}
+.glow-purple {
+  text-shadow: 0 0 8px var(--neon-purple), 0 0 20px var(--neon-purple);
+}
+
+/* ── Neon border cards ── */
+.card-neon {
+  background: var(--bg-card);
+  border: 1px solid var(--border-glow);
+  border-radius: 12px;
+  box-shadow: 0 0 12px rgba(0, 245, 255, 0.08),
+    inset 0 0 20px rgba(0, 245, 255, 0.03);
+  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+}
+.card-neon:hover {
+  transform: translateY(-4px);
+  border-color: var(--neon-cyan);
+  box-shadow: 0 0 24px rgba(0, 245, 255, 0.25),
+    0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.card-neon-pink {
+  background: var(--bg-card);
+  border: 1px solid rgba(255, 0, 127, 0.3);
+  border-radius: 12px;
+  box-shadow: 0 0 12px rgba(255, 0, 127, 0.08),
+    inset 0 0 20px rgba(255, 0, 127, 0.03);
+  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+}
+.card-neon-pink:hover {
+  transform: translateY(-4px);
+  border-color: var(--neon-pink);
+  box-shadow: 0 0 24px rgba(255, 0, 127, 0.25),
+    0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+/* ── Neon buttons ── */
+.btn-cyan {
+  background: transparent;
+  color: var(--neon-cyan);
+  border: 2px solid var(--neon-cyan);
+  padding: 10px 24px;
+  border-radius: 8px;
+  font-family: "Press Start 2P", monospace;
+  font-size: 0.55rem;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 0 8px rgba(0, 245, 255, 0.3);
+}
+.btn-cyan:hover {
+  background: var(--neon-cyan);
+  color: #000;
+  box-shadow: 0 0 20px var(--neon-cyan), 0 0 40px rgba(0, 245, 255, 0.4);
+}
+
+.btn-pink {
+  background: transparent;
+  color: var(--neon-pink);
+  border: 2px solid var(--neon-pink);
+  padding: 10px 24px;
+  border-radius: 8px;
+  font-family: "Press Start 2P", monospace;
+  font-size: 0.55rem;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 0 8px rgba(255, 0, 127, 0.3);
+}
+.btn-pink:hover {
+  background: var(--neon-pink);
+  color: #fff;
+  box-shadow: 0 0 20px var(--neon-pink), 0 0 40px rgba(255, 0, 127, 0.4);
+}
+
+.btn-purple {
+  background: transparent;
+  color: var(--neon-purple);
+  border: 2px solid var(--neon-purple);
+  padding: 10px 24px;
+  border-radius: 8px;
+  font-family: "Press Start 2P", monospace;
+  font-size: 0.55rem;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 0 8px rgba(191, 0, 255, 0.3);
+}
+.btn-purple:hover {
+  background: var(--neon-purple);
+  color: #fff;
+  box-shadow: 0 0 20px var(--neon-purple), 0 0 40px rgba(191, 0, 255, 0.4);
+}
+
+/* ── Form inputs ── */
+.input-neon {
+  background: var(--bg-card2);
+  border: 1px solid rgba(0, 245, 255, 0.2);
+  border-radius: 8px;
+  color: var(--text-primary);
+  padding: 10px 14px;
+  font-family: "Inter", sans-serif;
+  font-size: 0.9rem;
+  width: 100%;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.input-neon:focus {
+  border-color: var(--neon-cyan);
+  box-shadow: 0 0 0 3px rgba(0, 245, 255, 0.1);
+}
+.input-neon::placeholder {
+  color: var(--text-muted);
+}
+
+/* ── Scanline overlay effect ── */
+.scanlines::after {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.03) 2px,
+    rgba(0, 0, 0, 0.03) 4px
+  );
+  z-index: 9999;
+}
+
+/* ── Badge ── */
+.badge-lost {
+  background: rgba(255, 0, 127, 0.15);
+  color: var(--neon-pink);
+  border: 1px solid rgba(255, 0, 127, 0.4);
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.badge-found {
+  background: rgba(0, 245, 255, 0.1);
+  color: var(--neon-cyan);
+  border: 1px solid rgba(0, 245, 255, 0.4);
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+/* ── Grid background ── */
+.grid-bg {
+  background-image: 
+    linear-gradient(rgba(0, 245, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 245, 255, 0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* ── Animated gradient text ── */
+.gradient-text {
+  background: linear-gradient(90deg, var(--neon-cyan), var(--neon-purple), var(--neon-pink));
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: shimmer 3s linear infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: 0% center; }
+  100% { background-position: 200% center; }
+}
+
+/* ── Pulse animation ── */
+@keyframes pulse-neon {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+.pulse {
+  animation: pulse-neon 2s ease-in-out infinite;
+}
+
+/* ── Modal backdrop ── */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(4px);
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+/* ── Category pill ── */
+.category-pill {
+  background: rgba(191, 0, 255, 0.1);
+  color: var(--neon-purple);
+  border: 1px solid rgba(191, 0, 255, 0.3);
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  text-transform: capitalize;
+}
+
+.label-neon {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--neon-cyan);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+  display: block;
 }
