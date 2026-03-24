@@ -1,3 +1,4 @@
+"use client";
 // components/BrandTag.tsx
 // Fixed bottom-right branding tag — appears on every page via layout.
 
