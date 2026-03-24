@@ -4,6 +4,7 @@ import { useState, useRef, ChangeEvent, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { addItem, Category, ItemType } from "@/lib/store";
 import ConfirmPopup from "@/components/ConfirmPopup";
+import SafetyWarning from "@/components/SafetyWarning";
 
 interface ItemFormProps {
   type: ItemType;
@@ -43,6 +44,11 @@ export default function ItemForm({ type }: ItemFormProps) {
   const [submitStatus, setSubmitStatus] = useState<"idle" | "uploading" | "saving" | "done">("idle");
   const [submitted, setSubmitted] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // ── Feature: confirmation checkbox ────────────────────────
+  const [confirmed, setConfirmed] = useState(false);
+  const [checkboxError, setCheckboxError] = useState(false);
+
   const fileRef = useRef<HTMLInputElement>(null);
 
   const isLost = type === "lost";
@@ -77,6 +83,14 @@ export default function ItemForm({ type }: ItemFormProps) {
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
+
+    // Check confirmation checkbox first
+    if (!confirmed) {
+      setCheckboxError(true);
+      return;
+    }
+    setCheckboxError(false);
+
     const errs = validate();
     if (Object.keys(errs).length > 0) {
       setErrors(errs);
@@ -97,7 +111,7 @@ export default function ItemForm({ type }: ItemFormProps) {
 
       await addItem(
         { ...form, type, imageUrl: undefined },
-        imageFile // pass raw File — store.ts handles upload
+        imageFile
       );
 
       setSubmitStatus("done");
@@ -111,7 +125,6 @@ export default function ItemForm({ type }: ItemFormProps) {
     }
   };
 
-  // ── Submit button label based on status ───────────────────
   const btnLabel = () => {
     if (submitStatus === "uploading") return "UPLOADING IMAGE…";
     if (submitStatus === "saving") return "SAVING…";
@@ -155,6 +168,74 @@ export default function ItemForm({ type }: ItemFormProps) {
           onCancel={() => setShowPopup(false)}
         />
       )}
+
+      {/* ── Safety Warning Box ── */}
+      <SafetyWarning />
+
+      {/* ── Confirmation Checkbox ── */}
+      <div
+        style={{
+          marginBottom: 28,
+          padding: "16px 20px",
+          background: "rgba(255,255,255,0.02)",
+          border: checkboxError
+            ? "1px solid rgba(255,0,127,0.6)"
+            : "1px solid rgba(255,255,255,0.06)",
+          borderRadius: 8,
+          transition: "border-color 0.2s",
+        }}
+      >
+        <label
+          htmlFor="safetyConfirm"
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            gap: 12,
+            cursor: "pointer",
+          }}
+        >
+          <input
+            id="safetyConfirm"
+            type="checkbox"
+            checked={confirmed}
+            onChange={(e) => {
+              setConfirmed(e.target.checked);
+              if (e.target.checked) setCheckboxError(false);
+            }}
+            style={{
+              width: 18,
+              height: 18,
+              marginTop: 2,
+              accentColor: accentColor,
+              cursor: "pointer",
+              flexShrink: 0,
+            }}
+          />
+          <span
+            style={{
+              fontSize: "0.85rem",
+              color: confirmed ? accentColor : "#94a3b8",
+              lineHeight: 1.5,
+              fontWeight: confirmed ? 600 : 400,
+              transition: "color 0.2s",
+            }}
+          >
+            I confirm I will verify the owner before returning the item
+          </span>
+        </label>
+        {checkboxError && (
+          <p
+            style={{
+              color: "#ff007f",
+              fontSize: "0.75rem",
+              marginTop: 8,
+              marginLeft: 30,
+            }}
+          >
+            ⚠️ You must confirm this before submitting.
+          </p>
+        )}
+      </div>
 
       <form onSubmit={handleSubmit} noValidate>
         <div
@@ -378,25 +459,45 @@ export default function ItemForm({ type }: ItemFormProps) {
         </div>
 
         {/* Submit */}
-        <div style={{ marginTop: 32, display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 16 }}>
-          {submitting && submitStatus === "uploading" && (
-            <span style={{ fontSize: "0.75rem", color: "#00f5ff" }}>
-              ⏳ Uploading image to Supabase Storage…
-            </span>
+        <div style={{ marginTop: 32 }}>
+          {/* Disabled hint */}
+          {!confirmed && (
+            <p
+              style={{
+                fontSize: "0.75rem",
+                color: "#64748b",
+                textAlign: "right",
+                marginBottom: 8,
+              }}
+            >
+              ☝️ Check the safety confirmation above to enable submit
+            </p>
           )}
-          {submitting && submitStatus === "saving" && (
-            <span style={{ fontSize: "0.75rem", color: "#00f5ff" }}>
-              ⏳ Saving to database…
-            </span>
-          )}
-          <button
-            type="submit"
-            className={btnClass}
-            disabled={submitting}
-            style={{ minWidth: 200, opacity: submitting ? 0.7 : 1 }}
-          >
-            {btnLabel()}
-          </button>
+
+          <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 16 }}>
+            {submitting && submitStatus === "uploading" && (
+              <span style={{ fontSize: "0.75rem", color: "#00f5ff" }}>
+                ⏳ Uploading image to Supabase Storage…
+              </span>
+            )}
+            {submitting && submitStatus === "saving" && (
+              <span style={{ fontSize: "0.75rem", color: "#00f5ff" }}>
+                ⏳ Saving to database…
+              </span>
+            )}
+            <button
+              type="submit"
+              className={btnClass}
+              disabled={submitting || !confirmed}
+              style={{
+                minWidth: 200,
+                opacity: submitting || !confirmed ? 0.5 : 1,
+                cursor: !confirmed ? "not-allowed" : "pointer",
+              }}
+            >
+              {btnLabel()}
+            </button>
+          </div>
         </div>
       </form>
     </>

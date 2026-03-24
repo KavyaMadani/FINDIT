@@ -4,6 +4,16 @@
 // UI components remain unchanged.
 // ============================================================
 
+// Items older than 10 days are hidden from browse pages.
+const DAYS_VISIBLE = 10;
+
+/** Returns ISO timestamp for N days ago (used as .gte filter) */
+function daysAgoISO(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  return d.toISOString();
+}
+
 import { supabase } from "./supabase";
 
 export type ItemType = "lost" | "found";
@@ -52,23 +62,25 @@ function mapRow(row: any): Item {
   };
 }
 
-// ── Fetch all items ordered by newest first ──────────────────
+// ── Fetch all items (last 10 days) ordered by newest first ──
 export async function getAllItems(): Promise<Item[]> {
   const { data, error } = await supabase
     .from("items")
     .select("*")
+    .gte("created_at", daysAgoISO(DAYS_VISIBLE))
     .order("created_at", { ascending: false });
 
   if (error) throw new Error(error.message);
   return (data ?? []).map(mapRow);
 }
 
-// ── Fetch items filtered by type ─────────────────────────────
+// ── Fetch items by type (last 10 days) ──────────────────────
 export async function getItemsByType(type: ItemType): Promise<Item[]> {
   const { data, error } = await supabase
     .from("items")
     .select("*")
     .eq("type", type)
+    .gte("created_at", daysAgoISO(DAYS_VISIBLE))
     .order("created_at", { ascending: false });
 
   if (error) throw new Error(error.message);
