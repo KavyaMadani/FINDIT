@@ -1,6 +1,63 @@
 import Link from "next/link";
+import { supabase } from "@/lib/supabase";
 
-export default function HomePage() {
+// ── Fetch real-time stats from Supabase ──────────────────────
+async function getStats() {
+  const [lostRes, foundRes, locRes] = await Promise.all([
+    // Total lost items ever posted
+    supabase
+      .from("items")
+      .select("id", { count: "exact", head: true })
+      .eq("type", "lost"),
+
+    // Total found items ever posted
+    supabase
+      .from("items")
+      .select("id", { count: "exact", head: true })
+      .eq("type", "found"),
+
+    // Distinct locations across all items
+    supabase
+      .from("items")
+      .select("location"),
+  ]);
+
+  const lostCount = lostRes.count ?? 0;
+  const foundCount = foundRes.count ?? 0;
+
+  // Count unique locations
+  const allLocations = locRes.data ?? [];
+  const uniqueLocations = new Set(
+    allLocations.map((r: { location: string }) => r.location.trim().toLowerCase())
+  ).size;
+
+  return { lostCount, foundCount, uniqueLocations };
+}
+
+export default async function HomePage() {
+  const { lostCount, foundCount, uniqueLocations } = await getStats();
+
+  const stats = [
+    {
+      emoji: "😢",
+      label: "Lost Items Posted",
+      color: "#ff007f",
+      value: lostCount,
+    },
+    {
+      emoji: "🎉",
+      label: "Found Items Posted",
+      color: "#00ff88",
+      value: foundCount,
+    },
+    {
+      emoji: "📍",
+      label: "Unique Locations",
+      color: "#ffe600",
+      value: uniqueLocations,
+    },
+  ];
+
   return (
     <div className="max-w-7xl mx-auto px-4 py-16">
       {/* Hero */}
@@ -65,7 +122,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Stats row */}
+      {/* ── Real-time Stats (3 cards, live from Supabase) ── */}
       <section
         style={{
           display: "grid",
@@ -74,30 +131,27 @@ export default function HomePage() {
           marginBottom: 64,
         }}
       >
-        {[
-          { emoji: "😢", label: "Lost Items Posted", color: "#ff007f", value: "100+" },
-          { emoji: "🎉", label: "Items Reunited", color: "#00ff88", value: "60+" },
-          { emoji: "📍", label: "Campus Locations", color: "#ffe600", value: "30+" },
-          { emoji: "🏫", label: "Active Students", color: "#00f5ff", value: "200+" },
-        ].map((stat) => (
+        {stats.map((stat) => (
           <div
             key={stat.label}
             className="card-neon"
-            style={{ padding: "24px", textAlign: "center" }}
+            style={{ padding: "28px 24px", textAlign: "center" }}
           >
-            <div style={{ fontSize: "2rem", marginBottom: 8 }}>{stat.emoji}</div>
+            <div style={{ fontSize: "2rem", marginBottom: 10 }}>{stat.emoji}</div>
             <div
               style={{
-                fontSize: "1.8rem",
+                fontSize: "2.2rem",
                 fontWeight: 700,
                 color: stat.color,
                 fontFamily: "'Rajdhani', sans-serif",
-                textShadow: `0 0 10px ${stat.color}66`,
+                textShadow: `0 0 12px ${stat.color}88`,
+                lineHeight: 1,
+                marginBottom: 6,
               }}
             >
               {stat.value}
             </div>
-            <div style={{ fontSize: "0.75rem", color: "#64748b", marginTop: 4 }}>
+            <div style={{ fontSize: "0.75rem", color: "#64748b" }}>
               {stat.label}
             </div>
           </div>
