@@ -3,6 +3,7 @@
 import { useState, useRef, ChangeEvent, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { addItem, Category, ItemType } from "@/lib/store";
+import { validateText, validateImage } from "@/lib/moderation";
 import ConfirmPopup from "@/components/ConfirmPopup";
 import SafetyWarning from "@/components/SafetyWarning";
 
@@ -31,26 +32,36 @@ const DEFAULT_FORM = {
   phone: "",
 };
 
+// Status type for clearer state machine
+type SubmitStatus =
+  | "idle"
+  | "moderating"   // ← NEW: running content checks
+  | "uploading"
+  | "saving"
+  | "done";
+
 export default function ItemForm({ type }: ItemFormProps) {
   const router = useRouter();
   const [form, setForm] = useState(DEFAULT_FORM);
 
-  // imagePreview — only for display (base64). imageFile — the real File to upload.
   const [imagePreview, setImagePreview] = useState<string | undefined>(undefined);
   const [imageFile, setImageFile] = useState<File | undefined>(undefined);
 
   const [showPopup, setShowPopup] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [submitStatus, setSubmitStatus] = useState<"idle" | "uploading" | "saving" | "done">("idle");
+  const [submitStatus, setSubmitStatus] = useState<SubmitStatus>("idle");
   const [submitted, setSubmitted] = useState(false);
-  const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // ── Feature: confirmation checkbox ────────────────────────
+  // Field errors (validation + moderation combined)
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  // Single top-level moderation error banner
+  const [moderationError, setModerationError] = useState<string | null>(null);
+
+  // Safety confirmation checkbox
   const [confirmed, setConfirmed] = useState(false);
   const [checkboxError, setCheckboxError] = useState(false);
 
   const fileRef = useRef<HTMLInputElement>(null);
-
   const isLost = type === "lost";
   const accentColor = isLost ? "#ff007f" : "#00f5ff";
   const btnClass = isLost ? "btn-pink" : "btn-cyan";
@@ -60,16 +71,20 @@ export default function ItemForm({ type }: ItemFormProps) {
   ) => {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
     setErrors((prev) => ({ ...prev, [e.target.name]: "" }));
+    setModerationError(null);
   };
 
   const handleImage = (file: File) => {
     setImageFile(file);
+    setModerationError(null);
+    setErrors((prev) => ({ ...prev, image: "" }));
     const reader = new FileReader();
     reader.onloadend = () => setImagePreview(reader.result as string);
     reader.readAsDataURL(file);
   };
 
-  const validate = () => {
+  // ── Basic field validation ────────────────────────────────
+  const validateFields = () => {
     const errs: Record<string, string> = {};
     if (!form.title.trim()) errs.title = "Title is required";
     if (!form.description.trim()) errs.description = "Description is required";
@@ -81,28 +96,82 @@ export default function ItemForm({ type }: ItemFormProps) {
     return errs;
   };
 
-  const handleSubmit = (e: FormEvent) => {
+  // ── Run moderation checks ─────────────────────────────────
+  const runModeration = async (): Promise<boolean> => {
+    setSubmitStatus("moderating");
+    setModerationError(null);
+
+    // 1. Text checks — title, description, name
+    const textChecks: [string, "title" | "description" | "name"][] = [
+      [form.title, "title"],
+      [form.description, "description"],
+      [form.name, "name"],
+    ];
+
+    for (const [value, field] of textChecks) {
+      const result = validateText(field, value);
+      if (!result.valid) {
+        setErrors((prev) => ({ ...prev, [field]: result.reason ?? "Invalid content." }));
+        setModerationError("Please fix the highlighted fields before submitting.");
+        setSubmitStatus("idle");
+        return false;
+      }
+    }
+
+    // 2. Image check (only if image is attached)
+    if (imageFile) {
+      const imgResult = await validateImage(imageFile);
+      if (!imgResult.valid) {
+        setErrors((prev) => ({ ...prev, image: imgResult.reason ?? "Image not allowed." }));
+        setModerationError(
+          imgResult.reason ??
+          "This image is not allowed. Please upload a real photo of the lost/found item."
+        );
+        setSubmitStatus("idle");
+        return false;
+      }
+    }
+
+    return true; // all checks passed
+  };
+
+  // ── Handle form submit ────────────────────────────────────
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
 
-    // Check confirmation checkbox first
+    // Checkbox guard
     if (!confirmed) {
       setCheckboxError(true);
       return;
     }
     setCheckboxError(false);
 
-    const errs = validate();
+    // Required field validation
+    const errs = validateFields();
     if (Object.keys(errs).length > 0) {
       setErrors(errs);
       return;
     }
+
+    setSubmitting(true);
+
+    // Moderation
+    const passed = await runModeration();
+    if (!passed) {
+      setSubmitting(false);
+      return;
+    }
+
+    // Found item → confirmation popup
     if (type === "found") {
+      setSubmitStatus("idle");
       setShowPopup(true);
     } else {
-      doSubmit();
+      await doSubmit();
     }
   };
 
+  // ── Save to Supabase ──────────────────────────────────────
   const doSubmit = async () => {
     setSubmitting(true);
     try {
@@ -125,23 +194,29 @@ export default function ItemForm({ type }: ItemFormProps) {
     }
   };
 
+  // ── Button label based on current status ─────────────────
   const btnLabel = () => {
+    if (submitStatus === "moderating") return "CHECKING CONTENT…";
     if (submitStatus === "uploading") return "UPLOADING IMAGE…";
     if (submitStatus === "saving") return "SAVING…";
     if (submitStatus === "done") return "POSTED! ✓";
     return `POST ${type.toUpperCase()} ITEM`;
   };
 
+  // ── Status indicator text ─────────────────────────────────
+  const statusText = () => {
+    if (submitStatus === "moderating") return "🔍 Checking content for safety…";
+    if (submitStatus === "uploading") return "⏳ Uploading image to Supabase Storage…";
+    if (submitStatus === "saving") return "⏳ Saving to database…";
+    return null;
+  };
+
+  // ── Success screen ────────────────────────────────────────
   if (submitted) {
     return (
       <div
         className="card-neon"
-        style={{
-          padding: "48px 32px",
-          textAlign: "center",
-          maxWidth: 500,
-          margin: "0 auto",
-        }}
+        style={{ padding: "48px 32px", textAlign: "center", maxWidth: 500, margin: "0 auto" }}
       >
         <div style={{ fontSize: "3rem", marginBottom: 16 }}>✅</div>
         <h2
@@ -151,7 +226,7 @@ export default function ItemForm({ type }: ItemFormProps) {
           ITEM POSTED!
         </h2>
         <p style={{ color: "#94a3b8", fontSize: "0.85rem" }}>
-          Saved to Supabase. Redirecting to browse page…
+          Passed content review. Saved to Supabase. Redirecting…
         </p>
       </div>
     );
@@ -161,18 +236,15 @@ export default function ItemForm({ type }: ItemFormProps) {
     <>
       {showPopup && (
         <ConfirmPopup
-          onConfirm={() => {
-            setShowPopup(false);
-            doSubmit();
-          }}
-          onCancel={() => setShowPopup(false)}
+          onConfirm={() => { setShowPopup(false); doSubmit(); }}
+          onCancel={() => { setShowPopup(false); setSubmitting(false); }}
         />
       )}
 
-      {/* ── Safety Warning Box ── */}
+      {/* Safety Warning */}
       <SafetyWarning />
 
-      {/* ── Confirmation Checkbox ── */}
+      {/* Confirmation checkbox */}
       <div
         style={{
           marginBottom: 28,
@@ -187,12 +259,7 @@ export default function ItemForm({ type }: ItemFormProps) {
       >
         <label
           htmlFor="safetyConfirm"
-          style={{
-            display: "flex",
-            alignItems: "flex-start",
-            gap: 12,
-            cursor: "pointer",
-          }}
+          style={{ display: "flex", alignItems: "flex-start", gap: 12, cursor: "pointer" }}
         >
           <input
             id="safetyConfirm"
@@ -203,12 +270,8 @@ export default function ItemForm({ type }: ItemFormProps) {
               if (e.target.checked) setCheckboxError(false);
             }}
             style={{
-              width: 18,
-              height: 18,
-              marginTop: 2,
-              accentColor: accentColor,
-              cursor: "pointer",
-              flexShrink: 0,
+              width: 18, height: 18, marginTop: 2,
+              accentColor, cursor: "pointer", flexShrink: 0,
             }}
           />
           <span
@@ -220,22 +283,36 @@ export default function ItemForm({ type }: ItemFormProps) {
               transition: "color 0.2s",
             }}
           >
-            I confirm I will verify the owner before returning the item
+            I confirm this is a real lost/found item and I will verify the owner before returning it
           </span>
         </label>
         {checkboxError && (
-          <p
-            style={{
-              color: "#ff007f",
-              fontSize: "0.75rem",
-              marginTop: 8,
-              marginLeft: 30,
-            }}
-          >
+          <p style={{ color: "#ff007f", fontSize: "0.75rem", marginTop: 8, marginLeft: 30 }}>
             ⚠️ You must confirm this before submitting.
           </p>
         )}
       </div>
+
+      {/* Global moderation error banner */}
+      {moderationError && (
+        <div
+          style={{
+            marginBottom: 20,
+            padding: "14px 18px",
+            background: "rgba(255,0,127,0.08)",
+            border: "1px solid rgba(255,0,127,0.5)",
+            borderRadius: 8,
+            display: "flex",
+            alignItems: "flex-start",
+            gap: 10,
+          }}
+        >
+          <span style={{ fontSize: "1.1rem", flexShrink: 0 }}>🚫</span>
+          <p style={{ color: "#ff007f", fontSize: "0.85rem", lineHeight: 1.5 }}>
+            {moderationError}
+          </p>
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} noValidate>
         <div
@@ -247,29 +324,24 @@ export default function ItemForm({ type }: ItemFormProps) {
         >
           {/* Title */}
           <div style={{ gridColumn: "1 / -1" }}>
-            <label className="label-neon" htmlFor="title">
-              Item Title *
-            </label>
+            <label className="label-neon" htmlFor="title">Item Title *</label>
             <input
-              id="title"
-              name="title"
-              className="input-neon"
+              id="title" name="title" className="input-neon"
               placeholder="e.g. Blue JBL Earbuds"
-              value={form.title}
-              onChange={handleChange}
+              value={form.title} onChange={handleChange}
+              style={{ borderColor: errors.title ? "rgba(255,0,127,0.6)" : undefined }}
             />
-            {errors.title && <p style={{ color: "#ff007f", fontSize: "0.75rem", marginTop: 4 }}>{errors.title}</p>}
+            {errors.title && (
+              <p style={{ color: "#ff007f", fontSize: "0.75rem", marginTop: 4 }}>{errors.title}</p>
+            )}
           </div>
 
           {/* Category */}
           <div>
             <label className="label-neon" htmlFor="category">Category *</label>
             <select
-              id="category"
-              name="category"
-              className="input-neon"
-              value={form.category}
-              onChange={handleChange}
+              id="category" name="category" className="input-neon"
+              value={form.category} onChange={handleChange}
             >
               {CATEGORIES.map((c) => (
                 <option key={c} value={c}>
@@ -285,15 +357,13 @@ export default function ItemForm({ type }: ItemFormProps) {
               Date {isLost ? "Lost" : "Found"} *
             </label>
             <input
-              id="date"
-              name="date"
-              type="date"
-              className="input-neon"
-              value={form.date}
-              onChange={handleChange}
+              id="date" name="date" type="date" className="input-neon"
+              value={form.date} onChange={handleChange}
               style={{ colorScheme: "dark" }}
             />
-            {errors.date && <p style={{ color: "#ff007f", fontSize: "0.75rem", marginTop: 4 }}>{errors.date}</p>}
+            {errors.date && (
+              <p style={{ color: "#ff007f", fontSize: "0.75rem", marginTop: 4 }}>{errors.date}</p>
+            )}
           </div>
 
           {/* Location */}
@@ -302,30 +372,31 @@ export default function ItemForm({ type }: ItemFormProps) {
               Location {isLost ? "Lost" : "Found"} *
             </label>
             <input
-              id="location"
-              name="location"
-              className="input-neon"
+              id="location" name="location" className="input-neon"
               placeholder="e.g. Library 2nd Floor"
-              value={form.location}
-              onChange={handleChange}
+              value={form.location} onChange={handleChange}
             />
-            {errors.location && <p style={{ color: "#ff007f", fontSize: "0.75rem", marginTop: 4 }}>{errors.location}</p>}
+            {errors.location && (
+              <p style={{ color: "#ff007f", fontSize: "0.75rem", marginTop: 4 }}>{errors.location}</p>
+            )}
           </div>
 
           {/* Description */}
           <div style={{ gridColumn: "1 / -1" }}>
             <label className="label-neon" htmlFor="description">Description *</label>
             <textarea
-              id="description"
-              name="description"
-              className="input-neon"
+              id="description" name="description" className="input-neon"
               rows={3}
               placeholder="Describe the item in detail — color, brand, unique marks…"
-              value={form.description}
-              onChange={handleChange}
-              style={{ resize: "vertical" }}
+              value={form.description} onChange={handleChange}
+              style={{
+                resize: "vertical",
+                borderColor: errors.description ? "rgba(255,0,127,0.6)" : undefined,
+              }}
             />
-            {errors.description && <p style={{ color: "#ff007f", fontSize: "0.75rem", marginTop: 4 }}>{errors.description}</p>}
+            {errors.description && (
+              <p style={{ color: "#ff007f", fontSize: "0.75rem", marginTop: 4 }}>{errors.description}</p>
+            )}
           </div>
 
           {/* Image upload */}
@@ -333,12 +404,11 @@ export default function ItemForm({ type }: ItemFormProps) {
             <label className="label-neon">Image (optional)</label>
             <div
               style={{
-                border: "2px dashed rgba(0,245,255,0.2)",
-                borderRadius: 8,
-                padding: "20px",
-                textAlign: "center",
-                cursor: "pointer",
-                background: "rgba(0,245,255,0.02)",
+                border: errors.image
+                  ? "2px dashed rgba(255,0,127,0.5)"
+                  : "2px dashed rgba(0,245,255,0.2)",
+                borderRadius: 8, padding: "20px", textAlign: "center",
+                cursor: "pointer", background: "rgba(0,245,255,0.02)",
                 transition: "border-color 0.2s",
               }}
               onClick={() => fileRef.current?.click()}
@@ -352,8 +422,7 @@ export default function ItemForm({ type }: ItemFormProps) {
               {imagePreview ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
-                  src={imagePreview}
-                  alt="preview"
+                  src={imagePreview} alt="preview"
                   style={{ maxHeight: 160, maxWidth: "100%", borderRadius: 6, margin: "0 auto" }}
                 />
               ) : (
@@ -361,36 +430,31 @@ export default function ItemForm({ type }: ItemFormProps) {
                   <div style={{ fontSize: "2rem", marginBottom: 6 }}>📸</div>
                   <p style={{ fontSize: "0.8rem" }}>Click or drag & drop an image</p>
                   <p style={{ fontSize: "0.7rem", marginTop: 4, color: "#475569" }}>
-                    Will be uploaded to Supabase Storage
+                    Content is checked for safety before upload
                   </p>
                 </div>
               )}
             </div>
             <input
-              ref={fileRef}
-              type="file"
-              accept="image/*"
+              ref={fileRef} type="file" accept="image/*"
               style={{ display: "none" }}
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) handleImage(file);
-              }}
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) handleImage(f); }}
             />
-            {imagePreview && (
+            {errors.image && (
+              <p style={{ color: "#ff007f", fontSize: "0.75rem", marginTop: 6 }}>
+                🚫 {errors.image}
+              </p>
+            )}
+            {imagePreview && !errors.image && (
               <button
                 type="button"
                 onClick={() => {
-                  setImagePreview(undefined);
-                  setImageFile(undefined);
+                  setImagePreview(undefined); setImageFile(undefined);
                   if (fileRef.current) fileRef.current.value = "";
                 }}
                 style={{
-                  marginTop: 6,
-                  fontSize: "0.75rem",
-                  color: "#ff007f",
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
+                  marginTop: 6, fontSize: "0.75rem", color: "#ff007f",
+                  background: "none", border: "none", cursor: "pointer",
                 }}
               >
                 ✕ Remove image
@@ -398,17 +462,14 @@ export default function ItemForm({ type }: ItemFormProps) {
             )}
           </div>
 
-          {/* Contact info */}
+          {/* Contact info section */}
           <div style={{ gridColumn: "1 / -1" }}>
             <h3
               className="font-pixel"
               style={{
-                fontSize: "0.5rem",
-                color: accentColor,
-                letterSpacing: "2px",
-                marginBottom: 16,
-                paddingTop: 8,
-                borderTop: `1px solid ${accentColor}22`,
+                fontSize: "0.5rem", color: accentColor,
+                letterSpacing: "2px", marginBottom: 16,
+                paddingTop: 8, borderTop: `1px solid ${accentColor}22`,
               }}
             >
               YOUR CONTACT INFO
@@ -418,71 +479,55 @@ export default function ItemForm({ type }: ItemFormProps) {
           <div>
             <label className="label-neon" htmlFor="name">Your Name *</label>
             <input
-              id="name"
-              name="name"
-              className="input-neon"
+              id="name" name="name" className="input-neon"
               placeholder="Full name"
-              value={form.name}
-              onChange={handleChange}
+              value={form.name} onChange={handleChange}
+              style={{ borderColor: errors.name ? "rgba(255,0,127,0.6)" : undefined }}
             />
-            {errors.name && <p style={{ color: "#ff007f", fontSize: "0.75rem", marginTop: 4 }}>{errors.name}</p>}
+            {errors.name && (
+              <p style={{ color: "#ff007f", fontSize: "0.75rem", marginTop: 4 }}>{errors.name}</p>
+            )}
           </div>
 
           <div>
             <label className="label-neon" htmlFor="email">Your Email *</label>
             <input
-              id="email"
-              name="email"
-              type="email"
-              className="input-neon"
+              id="email" name="email" type="email" className="input-neon"
               placeholder="you@campus.edu"
-              value={form.email}
-              onChange={handleChange}
+              value={form.email} onChange={handleChange}
             />
-            {errors.email && <p style={{ color: "#ff007f", fontSize: "0.75rem", marginTop: 4 }}>{errors.email}</p>}
+            {errors.email && (
+              <p style={{ color: "#ff007f", fontSize: "0.75rem", marginTop: 4 }}>{errors.email}</p>
+            )}
           </div>
 
           <div>
-            <label className="label-neon" htmlFor="phone">
-              Phone Number (optional)
-            </label>
+            <label className="label-neon" htmlFor="phone">Phone Number (optional)</label>
             <input
-              id="phone"
-              name="phone"
-              type="tel"
-              className="input-neon"
+              id="phone" name="phone" type="tel" className="input-neon"
               placeholder="e.g. 9876543210"
-              value={form.phone}
-              onChange={handleChange}
+              value={form.phone} onChange={handleChange}
             />
           </div>
         </div>
 
-        {/* Submit */}
+        {/* Submit bar */}
         <div style={{ marginTop: 32 }}>
-          {/* Disabled hint */}
           {!confirmed && (
-            <p
-              style={{
-                fontSize: "0.75rem",
-                color: "#64748b",
-                textAlign: "right",
-                marginBottom: 8,
-              }}
-            >
-              ☝️ Check the safety confirmation above to enable submit
+            <p style={{ fontSize: "0.75rem", color: "#64748b", textAlign: "right", marginBottom: 8 }}>
+              ☝️ Check the confirmation above to enable submit
             </p>
           )}
-
-          <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 16 }}>
-            {submitting && submitStatus === "uploading" && (
-              <span style={{ fontSize: "0.75rem", color: "#00f5ff" }}>
-                ⏳ Uploading image to Supabase Storage…
-              </span>
-            )}
-            {submitting && submitStatus === "saving" && (
-              <span style={{ fontSize: "0.75rem", color: "#00f5ff" }}>
-                ⏳ Saving to database…
+          <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+            {submitting && statusText() && (
+              <span
+                style={{
+                  fontSize: "0.75rem",
+                  color: submitStatus === "moderating" ? "#ffe600" : "#00f5ff",
+                  display: "flex", alignItems: "center", gap: 6,
+                }}
+              >
+                {statusText()}
               </span>
             )}
             <button
@@ -490,9 +535,9 @@ export default function ItemForm({ type }: ItemFormProps) {
               className={btnClass}
               disabled={submitting || !confirmed}
               style={{
-                minWidth: 200,
+                minWidth: 220,
                 opacity: submitting || !confirmed ? 0.5 : 1,
-                cursor: !confirmed ? "not-allowed" : "pointer",
+                cursor: !confirmed ? "not-allowed" : submitting ? "wait" : "pointer",
               }}
             >
               {btnLabel()}
