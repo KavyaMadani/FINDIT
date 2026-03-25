@@ -11,7 +11,7 @@ export default function ConfirmPopup({ onConfirm, onCancel }: ConfirmPopupProps)
       <div
         className="card-neon-pink"
         style={{
-          maxWidth: 520,
+          maxWidth: 540,
           width: "100%",
           padding: "32px",
           position: "relative",
@@ -19,8 +19,8 @@ export default function ConfirmPopup({ onConfirm, onCancel }: ConfirmPopupProps)
         }}
       >
         {/* Header */}
-        <div style={{ textAlign: "center", marginBottom: 24 }}>
-          <div style={{ fontSize: "2.5rem", marginBottom: 12 }}>⚠️</div>
+        <div style={{ textAlign: "center", marginBottom: 20 }}>
+          <div style={{ fontSize: "2.5rem", marginBottom: 10 }}>⚠️</div>
           <h2
             className="font-pixel glow-pink"
             style={{ fontSize: "0.65rem", color: "#ff007f", letterSpacing: "2px" }}
@@ -29,7 +29,45 @@ export default function ConfirmPopup({ onConfirm, onCancel }: ConfirmPopupProps)
           </h2>
         </div>
 
-        {/* Body */}
+        {/* ── NEW: Image upload warning block ── */}
+        <div
+          style={{
+            background: "rgba(255, 30, 30, 0.08)",
+            border: "1px solid rgba(255, 30, 30, 0.45)",
+            borderRadius: 8,
+            padding: "14px 18px",
+            marginBottom: 14,
+          }}
+        >
+          {/* Red urgent warning */}
+          <p
+            style={{
+              fontSize: "0.95rem",
+              fontWeight: 700,
+              color: "#ff2222",
+              textShadow: "0 0 8px rgba(255,34,34,0.4)",
+              marginBottom: 10,
+              lineHeight: 1.5,
+            }}
+          >
+            ⚠️ DO NOT upload any human face or animal images.
+          </p>
+
+          {/* Yellow instructional note */}
+          <p
+            style={{
+              fontSize: "0.8rem",
+              color: "#ffe600",
+              lineHeight: 1.6,
+              textShadow: "0 0 6px rgba(255,230,0,0.3)",
+            }}
+          >
+            If the item includes a human face (like in jewellery or printed items), upload
+            only the item image without clearly showing the face.
+          </p>
+        </div>
+
+        {/* ── Existing: owner verification block ── */}
         <div
           style={{
             background: "rgba(255,0,127,0.06)",
@@ -84,7 +122,7 @@ export default function ConfirmPopup({ onConfirm, onCancel }: ConfirmPopupProps)
       <style jsx global>{`
         @keyframes fadeIn {
           from { opacity: 0; transform: scale(0.95) translateY(10px); }
-          to { opacity: 1; transform: scale(1) translateY(0); }
+          to   { opacity: 1; transform: scale(1)    translateY(0);    }
         }
       `}</style>
     </div>

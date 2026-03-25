@@ -1,129 +1,142 @@
 // ============================================================
-// lib/moderation.ts
-// Content moderation helpers — text + image (via API route).
-// No external API key required for text.
-// Image moderation calls /api/moderate-image (Sightengine).
+// lib/moderation.ts  — Enhanced text + image moderation
 // ============================================================
 
-// ── Blocked word / phrase list ────────────────────────────────
-const BLOCKED_WORDS = [
-  // Profanity (common, safe to keep list short in src)
-  "fuck", "shit", "bitch", "asshole", "bastard", "crap", "damn", "hell",
+// ── Blocked single words ──────────────────────────────────────
+const BLOCKED_WORDS: string[] = [
+  // Profanity
+  "fuck", "shit", "bitch", "asshole", "bastard", "crap",
   "piss", "slut", "whore", "dick", "cock", "pussy", "ass",
-  // Spam / nonsense indicators
-  "buy now", "click here", "free money", "win prize", "congratulations",
-  "100% free", "make money", "earn money", "work from home",
-  // Romance / unrelated
-  "lost in love", "losing my mind", "broken heart", "love you",
-  "miss you", "forever alone", "heartbreak",
-  // Test / placeholder
-  "test", "asdf", "qwerty", "1234", "xxxx", "aaaa", "lorem ipsum",
-  "abc", "xyz", "lmao", "lol", "haha", "hehe", "wtf", "omg",
+  "boob", "butt", "penis", "vagina", "rape", "kill", "murder",
+  // Inappropriate / adult themes
+  "sex", "sexy", "nude", "naked", "porn", "adult", "hot girl",
+  "hot boy", "nudes", "nsfw", "onlyfans", "escort", "hookup",
+  // Romance / unrelated emotions
+  "love", "gf", "bf", "crush", "girlfriend", "boyfriend",
+  "heartbreak", "breakup", "miss you", "forever alone",
+  // Spam / marketing
+  "buy now", "click here", "free money", "win prize",
+  "congratulations", "100% free", "make money", "earn money",
+  "work from home", "bitcoin", "crypto", "investment",
+  // Placeholder / test garbage
+  "asdf", "qwerty", "xxxx", "aaaa", "lorem ipsum",
+  "lmao", "lol", "haha", "hehe", "wtf", "omg", "bruh",
+  "yolo", "swag", "random", "idk", "idc",
+  // Abuse / threats
+  "abuse", "threat", "attack", "racist", "hate",
 ];
 
-const BLOCKED_PHRASES = [
-  "i am lost",
-  "i feel lost",
-  "lost my soul",
-  "lost my heart",
-  "lost my mind",
-  "lost my way",
-  "lost in life",
-  "nothing to lose",
-  "this is a test",
-  "just testing",
-  "ignore this",
-  "delete this",
+// ── Blocked full phrases ──────────────────────────────────────
+const BLOCKED_PHRASES: string[] = [
+  "lost in love", "i am lost", "i feel lost", "lost my soul",
+  "lost my heart", "lost my mind", "lost my way", "lost in life",
+  "nothing to lose", "this is a test", "just testing",
+  "test item", "ignore this", "delete this", "feeling sad",
+  "feeling lonely", "i'm bored", "just for fun", "for testing",
+  "hello world", "sample text", "dummy data", "placeholder",
+  "no idea", "don't know", "not sure", "whatever",
 ];
 
-// Minimum meaningful content thresholds
-const MIN_TITLE_LENGTH = 5;
-const MAX_TITLE_LENGTH = 120;
-const MIN_DESC_LENGTH = 15;
-const MAX_DESC_LENGTH = 1000;
-const MIN_NAME_LENGTH = 2;
-const MAX_NAME_LENGTH = 80;
+// ── Fake / reserved name strings ─────────────────────────────
+const FAKE_NAMES: string[] = [
+  "abc", "xyz", "test", "user", "admin", "root", "name",
+  "john doe", "jane doe", "anonymous", "unknown", "nobody",
+  "someone", "anyone", "person", "human", "student",
+  "aaa", "bbb", "ccc", "zzz", "xxx", "111",
+];
+
+// ── Thresholds ────────────────────────────────────────────────
+const MIN_TITLE_LEN   = 5;
+const MAX_TITLE_LEN   = 120;
+const MIN_DESC_LEN    = 15;
+const MAX_DESC_LEN    = 1000;
+const MIN_NAME_LEN    = 3;
+const MAX_NAME_LEN    = 80;
 
 export interface ModerationResult {
   valid: boolean;
-  reason?: string; // shown to user if invalid
+  reason?: string;
 }
+
+const INVALID_MSG =
+  "Please enter valid and appropriate details related to a real lost or found item.";
 
 // ── Text validation ───────────────────────────────────────────
 export function validateText(
   field: "title" | "description" | "name",
   content: string
 ): ModerationResult {
-  const trimmed = content.trim().toLowerCase();
+  const raw    = content.trim();
+  const lower  = raw.toLowerCase();
 
-  // 1. Length checks
+  // ─ 1. Empty / length ────────────────────────────────────────
+  if (!raw) return { valid: false, reason: `${capitalize(field)} is required.` };
+
   if (field === "title") {
-    if (trimmed.length < MIN_TITLE_LENGTH)
-      return { valid: false, reason: `Title is too short (min ${MIN_TITLE_LENGTH} chars).` };
-    if (trimmed.length > MAX_TITLE_LENGTH)
-      return { valid: false, reason: `Title is too long (max ${MAX_TITLE_LENGTH} chars).` };
+    if (raw.length < MIN_TITLE_LEN)
+      return { valid: false, reason: `Title must be at least ${MIN_TITLE_LEN} characters.` };
+    if (raw.length > MAX_TITLE_LEN)
+      return { valid: false, reason: `Title must be under ${MAX_TITLE_LEN} characters.` };
   }
 
   if (field === "description") {
-    if (trimmed.length < MIN_DESC_LENGTH)
+    if (raw.length < MIN_DESC_LEN)
       return {
         valid: false,
-        reason: `Description is too short. Add more detail about the item (min ${MIN_DESC_LENGTH} chars).`,
+        reason: `Description must be at least ${MIN_DESC_LEN} characters. Describe the item in more detail.`,
       };
-    if (trimmed.length > MAX_DESC_LENGTH)
-      return { valid: false, reason: `Description is too long (max ${MAX_DESC_LENGTH} chars).` };
+    if (raw.length > MAX_DESC_LEN)
+      return { valid: false, reason: `Description must be under ${MAX_DESC_LEN} characters.` };
   }
 
   if (field === "name") {
-    if (trimmed.length < MIN_NAME_LENGTH)
-      return { valid: false, reason: "Name is too short." };
-    if (trimmed.length > MAX_NAME_LENGTH)
-      return { valid: false, reason: "Name is too long." };
-    // Name should have at least one letter
-    if (!/[a-z]/i.test(trimmed))
-      return { valid: false, reason: "Please enter a real name." };
+    if (raw.length < MIN_NAME_LEN)
+      return { valid: false, reason: `Name must be at least ${MIN_NAME_LEN} characters.` };
+    if (raw.length > MAX_NAME_LEN)
+      return { valid: false, reason: `Name must be under ${MAX_NAME_LEN} characters.` };
+
+    // Name: only letters (including Unicode) and spaces
+    if (!/^[a-zA-Z\u00C0-\u024F\s.'-]+$/.test(raw))
+      return {
+        valid: false,
+        reason: "Name must contain only alphabets and spaces. No numbers or symbols.",
+      };
+
+    // Fake / reserved names
+    if (FAKE_NAMES.some((fake) => lower === fake || lower.trim() === fake))
+      return { valid: false, reason: "Please enter your real full name." };
   }
 
-  // 2. Repeating character spam (e.g. "aaaaaa", "......")
-  if (/^(.)\1{4,}$/.test(trimmed)) {
-    return {
-      valid: false,
-      reason: "Please enter a valid item description. Avoid jokes, spam, or inappropriate language.",
-    };
-  }
+  // ─ 2. Repeating character spam (aaaa, ...., 1111) ───────────
+  if (/^(.)\1{4,}$/.test(lower))
+    return { valid: false, reason: INVALID_MSG };
 
-  // 3. Blocked words
+  // ─ 3. Blocked words (whole-word match) ──────────────────────
   for (const word of BLOCKED_WORDS) {
-    // Match whole-word or close match
-    const regex = new RegExp(`\\b${word}\\b`, "i");
-    if (regex.test(trimmed)) {
-      return {
-        valid: false,
-        reason: "Please enter a valid item description. Avoid jokes, spam, or inappropriate language.",
-      };
-    }
+    // Escape special regex chars in the word
+    const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const regex   = new RegExp(`\\b${escaped}\\b`, "i");
+    if (regex.test(lower)) return { valid: false, reason: INVALID_MSG };
   }
 
-  // 4. Blocked phrases — exact substring match
+  // ─ 4. Blocked phrases (substring match) ─────────────────────
   for (const phrase of BLOCKED_PHRASES) {
-    if (trimmed.includes(phrase)) {
-      return {
-        valid: false,
-        reason: "Please enter a valid item description. Avoid jokes, spam, or inappropriate language.",
-      };
-    }
+    if (lower.includes(phrase)) return { valid: false, reason: INVALID_MSG };
   }
 
-  // 5. Only numbers / special chars — no real words
+  // ─ 5. Too few real letters (all numbers / symbols) ──────────
   if (field === "title" || field === "description") {
-    const letterCount = (trimmed.match(/[a-z]/gi) ?? []).length;
-    const totalChars = trimmed.replace(/\s/g, "").length;
-    if (totalChars > 0 && letterCount / totalChars < 0.4) {
-      return {
-        valid: false,
-        reason: "Please enter a meaningful item description using real words.",
-      };
-    }
+    const letterCount  = (lower.match(/[a-z]/gi) ?? []).length;
+    const nonSpaceLen  = lower.replace(/\s/g, "").length;
+    if (nonSpaceLen > 0 && letterCount / nonSpaceLen < 0.4)
+      return { valid: false, reason: "Please use real words to describe the item." };
+  }
+
+  // ─ 6. Title: must contain at least one noun-like word (3+ letters) ─
+  if (field === "title") {
+    const words = raw.split(/\s+/).filter((w) => /[a-zA-Z]{3,}/.test(w));
+    if (words.length === 0)
+      return { valid: false, reason: "Title must contain at least one real word." };
   }
 
   return { valid: true };
@@ -141,8 +154,6 @@ export async function validateImage(file: File): Promise<ModerationResult> {
     });
 
     if (!res.ok) {
-      // If API route fails / not configured → allow the image
-      // (fail-open so missing API keys don't block legitimate users)
       console.warn("Image moderation API unavailable — allowing image.");
       return { valid: true };
     }
@@ -150,8 +161,12 @@ export async function validateImage(file: File): Promise<ModerationResult> {
     const data: ModerationResult = await res.json();
     return data;
   } catch {
-    // Network error → fail-open
     console.warn("Image moderation network error — allowing image.");
     return { valid: true };
   }
+}
+
+// ── Utility ───────────────────────────────────────────────────
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
